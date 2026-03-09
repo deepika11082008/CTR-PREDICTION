@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Advertising CSV — Interactive Report</title>
+  <script src="https://cdn.plot.ly/plotly-2.24.2.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial; margin: 20px; background: #0f172a; color: #e6eef8; }
+    h1 { margin-bottom: 4px; color:#fff; }
+    p.lead { margin-top:0; color:#cbd5e1 }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-top:18px; margin-bottom:24px; }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); border-radius:8px; padding:12px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); }
+    .full { grid-column: 1 / -1; }
+    #notes { font-size:13px; color:#94a3b8; margin-top:10px }
+    a { color:#7dd3fc }
+    /* Form styles */
+    .form-card { margin-top:24px; }
+    .form-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:16px; }
+    .form-field { display:flex; flex-direction:column; gap:4px; }
+    .form-field label { font-size:14px; color:#cbd5e1; }
+    .form-field input { 
+      background:#1e293b; border:1px solid #334155; color:#fff; 
+      padding:8px; border-radius:4px; font-size:14px;
+    }
+    /* Metric cards */
+    .metric-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .metric-title {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .metric-value {
+      font-size: 32px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .metric-desc {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.4;
+    }
+    .form-field input:focus { outline:none; border-color:#38bdf8; }
+    button { 
+      background:#0ea5e9; color:#fff; border:none; padding:8px 16px;
+      border-radius:4px; cursor:pointer; font-weight:500;
+    }
+    button:hover { background:#0284c7; }
+    .error { color:#f87171; font-size:13px; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <h1>Advertising CSV — Interactive Visual Report</h1>
+  <p class="lead">This page is self-contained and reads the embedded CSV below to produce colorful interactive charts (Plotly). Use mouse to pan/zoom and hover for values.</p>
+  
+  <!-- Add Data Form -->
+  <div class="card form-card">
+    <h3 style="margin:0 0 16px 0">Add New Record</h3>
+    <form id="add-data-form" onsubmit="return false;">
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="time">Daily Time Spent (minutes)</label>
+          <input type="number" id="time" required min="0" max="1440" step="0.1" />
+        </div>
+        <div class="form-field">
+          <label for="age">Age</label>
+          <input type="number" id="age" required min="13" max="120" />
+        </div>
+        <div class="form-field">
+          <label for="income">Area Income</label>
+          <input type="number" id="income" required min="0" step="0.01" />
+        </div>
+        <div class="form-field">
+          <label for="internet">Daily Internet Usage (minutes)</label>
+          <input type="number" id="internet" required min="0" max="1440" step="0.1" />
+        </div>
+        <div class="form-field">
+          <label for="clicked">Clicked on Ad</label>
+          <select id="clicked" required style="background:#1e293b; border:1px solid #334155; color:#fff; padding:8px; border-radius:4px;">
+            <option value="1">Yes</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="addDataPoint()">Add Record</button>
+      <span id="form-error" class="error"></span>
+    </form>
+  </div>
+
+  <div class="grid">
+    <div class="card" id="scatter-card">
+      <h3 style="margin:0 0 8px 0">Daily Time Spent vs Daily Internet Usage</h3>
+      <div id="scatter" style="height:360px;"></div>
+      <div id="notes">Points colored by <strong>Clicked on Ad</strong> (0 = not clicked, 1 = clicked).</div>
+    </div>
+
+    <div class="card" id="age-card">
+      <h3 style="margin:0 0 8px 0">Age Distribution</h3>
+      <div id="age-hist" style="height:360px;"></div>
+    </div>
+
+    <div class="card full" id="corr-card">
+      <h3 style="margin:0 0 8px 0">Correlation Heatmap (numeric columns)</h3>
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px;">
+        <label style="font-size:14px; color:#cbd5e1; display:flex; align-items:center; gap:8px;">
+          <input id="heat-toggle" type="checkbox" checked />
+          <span>Show values</span>
+        </label>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label style="font-size:14px; color:#cbd5e1; display:flex; align-items:center; gap:8px;">
+            <input id="heat-colorscheme" type="radio" name="colorscheme" value="YlOrRd" checked />
+            <span>Red-Yellow</span>
+          </label>
+          <label style="font-size:14px; color:#cbd5e1; display:flex; align-items:center; gap:8px;">
+            <input id="heat-colorscheme-alt" type="radio" name="colorscheme" value="RdBu" />
+            <span>Red-Blue</span>
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label style="font-size:14px; color:#cbd5e1">Value format:</label>
+          <select id="heat-format" style="background:#1e293b; border:1px solid #334155; color:#fff; padding:4px 8px; border-radius:4px; font-size:14px">
+            <option value="decimal">0.123</option>
+            <option value="percent">12.3%</option>
+          </select>
+        </div>
+      </div>
+      <div id="corr-heat" style="height:420px;"></div>
+      <div style="margin-top:12px; color:#94a3b8; font-size:13px">
+        Hover over cells to see exact values. Values range from -1 (perfect negative correlation) to +1 (perfect positive correlation).
+        0 indicates no linear correlation between variables.
+      </div>
+    </div>
+    
+    <!-- Stats summary -->
+    <div class="card full">
+      <h3 style="margin:0 0 8px 0">Dataset Statistics</h3>
+      <div id="stats" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:16px;">
+        <div>
+          <div style="font-size:13px; color:#94a3b8">Total Records</div>
+          <div style="font-size:24px; font-weight:500; color:#fff" id="total-records">0</div>
+        </div>
+        <div>
+          <div style="font-size:13px; color:#94a3b8">Ad Click Rate</div>
+          <div style="font-size:24px; font-weight:500; color:#fff" id="click-rate">0%</div>
+        </div>
+        <div>
+          <div style="font-size:13px; color:#94a3b8">Avg Time on Site</div>
+          <div style="font-size:24px; font-weight:500; color:#fff" id="avg-time">0</div>
+        </div>
+        <div>
+          <div style="font-size:13px; color:#94a3b8">Avg Internet Usage</div>
+          <div style="font-size:24px; font-weight:500; color:#fff" id="avg-internet">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Classification Metrics -->
+    <div class="card full">
+      <h3 style="margin:0 0 8px 0">Classification Performance Metrics</h3>
+      <div style="margin-bottom:16px; font-size:14px; color:#94a3b8">
+        Simple logistic classifier trained on 70% of data, evaluated on 30% test set.
+        Updates automatically as new records are added.
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:24px;">
+        <div class="metric-card">
+          <div class="metric-title">Accuracy</div>
+          <div class="metric-value" id="metric-accuracy">-</div>
+          <div class="metric-desc">Overall prediction accuracy across all classes</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Precision</div>
+          <div class="metric-value" id="metric-precision">-</div>
+          <div class="metric-desc">Of predicted clicks, % that were actual clicks</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Recall</div>
+          <div class="metric-value" id="metric-recall">-</div>
+          <div class="metric-desc">Of actual clicks, % that were predicted</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">F1 Score</div>
+          <div class="metric-value" id="metric-f1">-</div>
+          <div class="metric-desc">Harmonic mean of precision and recall</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Embedded CSV data to avoid CORS/file issues; updated from repository's advertising.csv -->
+  <script id="csv-data" type="text/plain">
+Daily Time Spent on Site,Age,Area Income,Daily Internet Usage,Clicked on Ad
+68.95,35,61833.90,256.09,0
+80.23,31,68441.85,193.77,0
+69.78,26,59785.94,236.50,0
+74.33,29,54806.18,245.89,0
+68.37,35,73889.99,225.58,0
+74.80,57,24562.70,226.88,1
+73.95,22,39691.69,203.64,0
+68.01,27,42807.49,226.15,0
+74.12,43,61833.90,237.21,1
+69.88,31,61686.20,196.35,0
+79.80,48,59245.12,226.07,1
+63.25,42,54062.91,253.22,0
+62.12,54,54648.10,231.90,1
+78.12,23,46789.01,205.33,0
+60.55,28,52345.60,198.22,0
+81.29,36,65432.10,241.11,0
+71.47,39,69999.99,240.12,1
+69.15,33,58999.00,217.50,0
+75.66,45,63000.00,256.78,1
+64.23,24,42000.00,180.90,0
+70.55,29,58000.00,210.50,0
+77.35,52,72000.00,299.12,1
+66.12,38,49000.00,200.75,0
+72.44,41,61000.12,230.02,1
+65.90,30,55555.55,210.00,0
+76.11,47,70234.56,260.40,1
+69.50,34,59800.00,215.33,0
+73.00,26,48000.00,190.75,0
+61.80,50,45000.00,220.10,1
+70.00,32,60000.00,225.00,0
+  </script>
+
+  <script>
+    // Parse CSV and maintain live dataset
+    const raw = document.getElementById('csv-data').textContent.trim();
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    const headers = lines[0].split(',').map(h => h.trim());
+    let rows = lines.slice(1).map(line => {
+      const parts = line.split(',').map(p => p.trim());
+      const obj = {};
+      headers.forEach((h, i) => {
+        const val = parts[i];
+        const n = Number(val);
+        obj[h] = isNaN(n) ? val : n;
+      });
+      return obj;
+    });
+
+    // Initialize arrays that will be updated
+    let time = [];
+    let internet = [];
+    let age = [];
+    let income = [];
+    let clicked = [];
+
+    // Initial data load
+    rows.forEach(r => {
+      time.push(r['Daily Time Spent on Site']);
+      internet.push(r['Daily Internet Usage']);
+      age.push(r['Age']);
+      income.push(r['Area Income']);
+      clicked.push(r['Clicked on Ad']);
+    });
+
+    // Scatter colored by clicked
+    const scatterTrace0 = {
+      x: time.filter((v,i) => clicked[i] === 0),
+      y: internet.filter((v,i) => clicked[i] === 0),
+      mode: 'markers',
+      name: 'Not clicked',
+      marker: { size:9, color: '#60a5fa', opacity:0.8, line:{width:0} }
+    };
+    const scatterTrace1 = {
+      x: time.filter((v,i) => clicked[i] === 1),
+      y: internet.filter((v,i) => clicked[i] === 1),
+      mode: 'markers',
+      name: 'Clicked',
+      marker: { size:11, color: '#fb7185', symbol:'diamond', opacity:0.95 }
+    };
+
+    Plotly.newPlot('scatter', [scatterTrace0, scatterTrace1], {
+      xaxis:{title:'Daily Time Spent on Site (minutes)', gridcolor:'#0b1220'},
+      yaxis:{title:'Daily Internet Usage (minutes)', gridcolor:'#0b1220'},
+      paper_bgcolor:'#071123', plot_bgcolor:'#071123',
+      legend:{bgcolor:'rgba(0,0,0,0)'}
+    }, {responsive:true});
+
+    // Age histogram
+    const histTrace = {
+      x: age,
+      type: 'histogram',
+      marker: { color: '#f472b6' },
+      opacity:0.9,
+      nbinsx: 10
+    };
+    Plotly.newPlot('age-hist', [histTrace], {
+      xaxis:{title:'Age'},
+      yaxis:{title:'Count'},
+      paper_bgcolor:'#071123', plot_bgcolor:'#071123'
+    }, {responsive:true});
+
+    // Correlation matrix for numeric columns
+    const cols = [time, age, income, internet, clicked];
+    const colNames = ['Time','Age','Area Income','Internet Usage','Clicked'];
+
+    function corr(a,b){
+      const n = a.length;
+      const ma = a.reduce((s,v)=>s+v,0)/n;
+      const mb = b.reduce((s,v)=>s+v,0)/n;
+      let num=0, sa=0, sb=0;
+      for(let i=0;i<n;i++){ num += (a[i]-ma)*(b[i]-mb); sa += Math.pow(a[i]-ma,2); sb += Math.pow(b[i]-mb,2); }
+      return num/Math.sqrt(sa*sb);
+    }
+    const matrix = [];
+    for(let i=0;i<cols.length;i++){
+      const row = [];
+      for(let j=0;j<cols.length;j++){
+        row.push(Number(corr(cols[i], cols[j]).toFixed(3)));
+      }
+      matrix.push(row);
+    }
+
+    // Prepare heatmap trace (we'll toggle text overlay on demand)
+     // Function to update all plots when data changes
+     function updatePlots() {
+       // Update arrays
+       time.length = 0;
+       internet.length = 0;
+       age.length = 0;
+       income.length = 0;
+       clicked.length = 0;
+       
+       rows.forEach(r => {
+         time.push(r['Daily Time Spent on Site']);
+         internet.push(r['Daily Internet Usage']);
+         age.push(r['Age']);
+         income.push(r['Area Income']);
+         clicked.push(r['Clicked on Ad']);
+       });
+
+       // Update stats
+       document.getElementById('total-records').textContent = rows.length;
+       document.getElementById('click-rate').textContent = 
+         ((clicked.filter(x => x === 1).length / clicked.length * 100) || 0).toFixed(1) + '%';
+       document.getElementById('avg-time').textContent = 
+         (time.reduce((a,b) => a+b, 0) / time.length || 0).toFixed(1) + ' min';
+       document.getElementById('avg-internet').textContent = 
+         (internet.reduce((a,b) => a+b, 0) / internet.length || 0).toFixed(1) + ' min';
+
+       // Update scatter plot
+       const scatterTrace0 = {
+         x: time.filter((v,i) => clicked[i] === 0),
+         y: internet.filter((v,i) => clicked[i] === 0),
+         mode: 'markers',
+         name: 'Not clicked',
+         marker: { size:9, color: '#60a5fa', opacity:0.8, line:{width:0} }
+       };
+       const scatterTrace1 = {
+         x: time.filter((v,i) => clicked[i] === 1),
+         y: internet.filter((v,i) => clicked[i] === 1),
+         mode: 'markers',
+         name: 'Clicked',
+         marker: { size:11, color: '#fb7185', symbol:'diamond', opacity:0.95 }
+       };
+       Plotly.react('scatter', [scatterTrace0, scatterTrace1], {
+         xaxis:{title:'Daily Time Spent on Site (minutes)', gridcolor:'#0b1220'},
+         yaxis:{title:'Daily Internet Usage (minutes)', gridcolor:'#0b1220'},
+         paper_bgcolor:'#071123', plot_bgcolor:'#071123',
+         legend:{bgcolor:'rgba(0,0,0,0)'}
+       });
+
+       // Update age histogram
+       const histTrace = {
+         x: age,
+         type: 'histogram',
+         marker: { color: '#f472b6' },
+         opacity:0.9,
+         nbinsx: 10
+       };
+       Plotly.react('age-hist', [histTrace], {
+         xaxis:{title:'Age'},
+         yaxis:{title:'Count'},
+         paper_bgcolor:'#071123', plot_bgcolor:'#071123'
+       });
+
+       // Update correlation matrix
+       const cols = [time, age, income, internet, clicked];
+       const colNames = ['Time','Age','Area Income','Internet Usage','Clicked'];
+       const matrix = [];
+       for(let i=0;i<cols.length;i++){
+         const row = [];
+         for(let j=0;j<cols.length;j++){
+           row.push(Number(corr(cols[i], cols[j]).toFixed(3)));
+         }
+         matrix.push(row);
+       }
+
+       const formatValue = (v) => {
+         const format = document.getElementById('heat-format').value;
+         if (format === 'percent') {
+           return (v * 100).toFixed(1) + '%';
+         }
+         return v.toFixed(3);
+       };
+
+       const colorscheme = document.querySelector('input[name="colorscheme"]:checked').value;
+       const showText = document.getElementById('heat-toggle').checked;
+
+       const heat = {
+         z: matrix,
+         x: colNames,
+         y: colNames,
+         type: 'heatmap',
+         colorscale: colorscheme,
+         hoverongaps: false,
+         showscale: true,
+         text: matrix.map(r => r.map(formatValue)),
+         texttemplate: showText ? '%{text}' : '',
+         textfont: { 
+           color: showText ? matrix.map(r => r.map(v => Math.abs(v) > 0.4 ? 'white' : 'black')) : null,
+           size: 11
+         },
+         hovertemplate: '<b>%{x}</b> vs <b>%{y}</b><br>Correlation: %{text}<extra></extra>'
+       };
+       Plotly.react('corr-heat', [heat], {
+         paper_bgcolor:'#071123', plot_bgcolor:'#071123',
+         xaxis:{ticks:'', side:'top'},
+         yaxis:{ticks:''}
+       });
+     }
+
+     // Logistic Regression implementation
+     function sigmoid(z) {
+       return 1 / (1 + Math.exp(-z));
+     }
+
+     function trainLogisticRegression(X, y, learningRate = 0.1, iterations = 100) {
+       const m = X.length;
+       const n = X[0].length;
+       let theta = new Array(n).fill(0);
+       
+       for(let iter = 0; iter < iterations; iter++) {
+         const h = X.map(x => sigmoid(x.reduce((sum, xi, j) => sum + xi * theta[j], 0)));
+         const gradient = new Array(n).fill(0);
+         
+         for(let j = 0; j < n; j++) {
+           for(let i = 0; i < m; i++) {
+             gradient[j] += (h[i] - y[i]) * X[i][j];
+           }
+           gradient[j] = (gradient[j] / m) * learningRate;
+         }
+         
+         theta = theta.map((t, j) => t - gradient[j]);
+       }
+       return theta;
+     }
+
+     function predict(X, theta) {
+       return X.map(x => sigmoid(x.reduce((sum, xi, j) => sum + xi * theta[j], 0)) >= 0.5 ? 1 : 0);
+     }
+
+     function calculateMetrics(yTrue, yPred) {
+       let tp = 0, fp = 0, fn = 0, tn = 0;
+       for(let i = 0; i < yTrue.length; i++) {
+         if(yTrue[i] === 1 && yPred[i] === 1) tp++;
+         if(yTrue[i] === 0 && yPred[i] === 1) fp++;
+         if(yTrue[i] === 1 && yPred[i] === 0) fn++;
+         if(yTrue[i] === 0 && yPred[i] === 0) tn++;
+       }
+       
+       const accuracy = (tp + tn) / (tp + tn + fp + fn);
+       const precision = tp / (tp + fp) || 0;
+       const recall = tp / (tp + fn) || 0;
+       const f1 = 2 * (precision * recall) / (precision + recall) || 0;
+       
+       return { accuracy, precision, recall, f1 };
+     }
+
+     function updateMetrics() {
+       if(rows.length < 10) {
+         document.getElementById('metric-accuracy').textContent = 'Need 10+ records';
+         document.getElementById('metric-precision').textContent = '-';
+         document.getElementById('metric-recall').textContent = '-';
+         document.getElementById('metric-f1').textContent = '-';
+         return;
+       }
+
+       // Prepare features (normalize them first)
+       const features = rows.map(r => [
+         (r['Daily Time Spent on Site'] - Math.min(...time)) / (Math.max(...time) - Math.min(...time)),
+         (r['Age'] - Math.min(...age)) / (Math.max(...age) - Math.min(...age)),
+         (r['Area Income'] - Math.min(...income)) / (Math.max(...income) - Math.min(...income)),
+         (r['Daily Internet Usage'] - Math.min(...internet)) / (Math.max(...internet) - Math.min(...internet)),
+         1  // bias term
+       ]);
+       const labels = rows.map(r => r['Clicked on Ad']);
+       
+       // Split train/test (70/30)
+       const splitIdx = Math.floor(features.length * 0.7);
+       const X_train = features.slice(0, splitIdx);
+       const y_train = labels.slice(0, splitIdx);
+       const X_test = features.slice(splitIdx);
+       const y_test = labels.slice(splitIdx);
+       
+       // Train model and get predictions
+       const theta = trainLogisticRegression(X_train, y_train);
+       const y_pred = predict(X_test, theta);
+       
+       // Calculate and display metrics
+       const metrics = calculateMetrics(y_test, y_pred);
+       document.getElementById('metric-accuracy').textContent = (metrics.accuracy * 100).toFixed(1) + '%';
+       document.getElementById('metric-precision').textContent = (metrics.precision * 100).toFixed(1) + '%';
+       document.getElementById('metric-recall').textContent = (metrics.recall * 100).toFixed(1) + '%';
+       document.getElementById('metric-f1').textContent = (metrics.f1 * 100).toFixed(1) + '%';
+     }
+
+     // Handle form submission to add new data
+     function addDataPoint() {
+       const formError = document.getElementById('form-error');
+       try {
+         // Get values
+         const newTime = Number(document.getElementById('time').value);
+         const newAge = Number(document.getElementById('age').value);
+         const newIncome = Number(document.getElementById('income').value);
+         const newInternet = Number(document.getElementById('internet').value);
+         const newClicked = Number(document.getElementById('clicked').value);
+
+         // Validate
+         if(newTime <= 0 || newTime > 1440) throw new Error('Daily time must be between 0-1440 minutes');
+         if(newAge < 13 || newAge > 120) throw new Error('Age must be between 13-120');
+         if(newIncome <= 0) throw new Error('Income must be positive');
+         if(newInternet <= 0 || newInternet > 1440) throw new Error('Internet usage must be between 0-1440 minutes');
+
+         // Add to dataset
+         rows.push({
+           'Daily Time Spent on Site': newTime,
+           'Age': newAge,
+           'Area Income': newIncome,
+           'Daily Internet Usage': newInternet,
+           'Clicked on Ad': newClicked
+         });
+
+         // Update visualizations and metrics
+         updatePlots();
+         updateMetrics();
+
+         // Clear form
+         document.getElementById('add-data-form').reset();
+          formError.textContent = '';
+       } catch(err) {
+         formError.textContent = err.message;
+         return false;
+       }
+     }
+
+     // Create initial plots
+     updatePlots();    // Toggle showing numeric values on the heatmap cells
+    const heatToggle = document.getElementById('heat-toggle');
+    heatToggle.addEventListener('change', function(e){
+      const show = e.target.checked;
+      if(show){
+        // create a text matrix of formatted numbers
+        const textMatrix = matrix.map(r => r.map(v => v.toFixed(3)));
+        Plotly.restyle('corr-heat', { text: [textMatrix], texttemplate: ['%{text}'], textfont: [{color: 'black'}] }, [0]);
+      } else {
+        Plotly.restyle('corr-heat', { text: [null], texttemplate: [''] }, [0]);
+      }
+    });
+
+  </script>
+</body>
+</html>
